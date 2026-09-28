@@ -22,6 +22,7 @@ const MOTIONS = [
   ['shake', 'ぶるぶる'], ['pulse', 'どくどく'], ['jelly', 'ぷるぷる'], ['float', 'ふわふわ'],
   ['swing', 'ゆらゆら'], ['spin', 'くるくる'], ['flip', 'ぺらぺら'], ['zoom', 'ドーン'], ['typing', 'タイピング'],
 ];
+const EFFECTS = [['none', 'なし'], ['melt', '🫠 とける'], ['ripple', '🌊 水面ゆらゆら']];
 const COLOR_FX = [['solid', '単色'], ['gradient', 'グラデ'], ['rainbow', '🌈 虹色'], ['blink', '⚡ チカチカ']];
 const STYLES = [
   ['ピンク', { fill: '#ffffff', stroke: '#ff4f8b', outer: '#ffffff', fill2: '#ffd1e3' }],
@@ -35,7 +36,6 @@ const STYLES = [
 const PHRASES = ['了解！', 'ありがとう', 'おつかれさま', 'おはよう', 'おやすみ', 'よろしく\nお願いします', '草', 'えらい！', '神', '🎉おめでとう', 'ｗｗｗ', 'むり…'];
 const SIZES = [[128, '128'], [240, '240'], [320, '320'], [480, '480']];
 const FPS = [[10, '軽い'], [15, 'ふつう'], [20, 'なめらか'], [25, 'ぬるぬる']];
-const BGS = [['transparent', '透明'], ['color', '色つき']];
 const TEXT_POS = [['bottom', '下'], ['top', '上'], ['center', '重ねる']];
 const TOOLS = [['wand', '👆 タップで消す'], ['erase', '🧽 消しゴム'], ['restore', '🖌 復元']];
 const TOOL_HINTS = {
@@ -47,15 +47,16 @@ const TOOL_HINTS = {
 const MOTION_SHRINK = { bounce: 0.84, pulse: 0.86, jelly: 0.9, zoom: 0.9, shake: 0.9, float: 0.9, swing: 0.88, hop: 0.88, wave: 0.9 };
 
 const DEFAULTS = {
-  text: '了解！', font: 'Dela Gothic One', motion: 'bounce', dur: 1,
+  text: '了解！', font: 'Dela Gothic One', motion: 'bounce', effect: 'none', dur: 1,
   colorFx: 'solid', fill: '#ffffff', fill2: '#ffd1e3', stroke: '#ff4f8b', outer: '#ffffff',
   strokeW: 0.12, outer2: true, shadow: false,
-  size: 320, fps: 20, bg: 'transparent', bgColor: '#ffffff',
+  size: 320, fps: 20, bgColor: 'transparent',
   filter: 'none', border: 10, borderColor: '#ffffff', photoScale: 1, textPos: 'bottom',
 };
 
 let S = { ...DEFAULTS };
 try { Object.assign(S, JSON.parse(localStorage.getItem(STORE_KEY) || '{}')); } catch {}
+if ('bg' in S) { if (S.bg === 'transparent') S.bgColor = 'transparent'; delete S.bg; } // 旧設定の移行
 const save = () => { try { localStorage.setItem(STORE_KEY, JSON.stringify(S)); } catch {} };
 
 // ---------- 描画 ----------
@@ -75,8 +76,11 @@ function computeLayout(ctx) {
   const W = S.size;
   const hasText = S.text.trim().length > 0;
   const art = photo.art;
-  const k = MOTION_SHRINK[S.motion] || 1;
-  const area = (cx, cy, w, h) => ({ cx: cx * W, cy: cy * W, w: w * W * k, h: h * W * k });
+  // 溶けるエフェクトは垂れる分の余白を下に取る
+  const melt = S.effect === 'melt';
+  const k = (MOTION_SHRINK[S.motion] || 1) * (melt ? 0.5 : 1);
+  const shift = melt ? -0.22 : 0;
+  const area = (cx, cy, w, h) => ({ cx: cx * W, cy: (cy + shift) * W, w: w * W * k, h: h * W * k });
 
   let tA = null, pA = null;
   if (art && hasText) {
@@ -181,15 +185,34 @@ function charMotion(t, i, n) {
   return { dy: 0, vis: true };
 }
 
-function render(ctx, t) {
-  const W = S.size;
-  if (!layout) layout = computeLayout(ctx);
-  const L = layout;
-  ctx.setTransform(1, 0, 0, 1, 0, 0);
-  ctx.clearRect(0, 0, W, W);
-  if (S.bg === 'color') { ctx.fillStyle = S.bgColor; ctx.fillRect(0, 0, W, W); }
-  if (!L.bounds) return;
+// 描画先キャンバスに、指定の倍率・原点で1コマ描く（背景は描かない）
+// view: { k: 倍率, ox, oy: 切り出し原点（基準座標） }
+let layerCv = null;
+function getLayer(w, h) {
+  if (!layerCv) layerCv = document.createElement('canvas');
+  if (layerCv.width !== w || layerCv.height !== h) { layerCv.width = w; layerCv.height = h; }
+  return layerCv;
+}
 
+function render(ctx, t, view = { k: 1, ox: 0, oy: 0 }) {
+  const cw = ctx.canvas.width, ch = ctx.canvas.height;
+  if (!layout) layout = computeLayout(ctx);
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.clearRect(0, 0, cw, ch);
+  if (!layout.bounds) return;
+  if (S.effect === 'none') { drawScene(ctx, t, view); return; }
+  const lc = getLayer(cw, ch), lx = lc.getContext('2d');
+  lx.setTransform(1, 0, 0, 1, 0, 0);
+  lx.clearRect(0, 0, cw, ch);
+  drawScene(lx, t, view);
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  if (S.effect === 'ripple') ripple(ctx, lc, t, view);
+  else if (S.effect === 'melt') melt(ctx, lc, t, view);
+}
+
+function drawScene(ctx, t, { k, ox, oy }) {
+  const W = S.size, L = layout;
+  ctx.setTransform(k, 0, 0, k, -ox * k, -oy * k);
   const m = groupMotion(t);
   const fit = S.motion === 'spin' ? L.spinFit : 1;
   const px = L.bounds.cx, py = m.pivot === 'bottom' ? L.bounds.y1 : L.bounds.cy;
@@ -198,7 +221,6 @@ function render(ctx, t) {
   ctx.rotate(m.rot);
   ctx.scale(m.sx * fit, m.sy * fit);
   ctx.translate(-px, -py);
-
   if (L.photoRect) {
     const r = L.photoRect;
     ctx.imageSmoothingEnabled = S.filter !== 'pixel';
@@ -208,6 +230,49 @@ function render(ctx, t) {
   if (L.lines.length) drawText(ctx, t, L);
   ctx.restore();
 }
+
+// 水面に映ったような揺らぎ：行ごとに横へずらし、縦も少し揺らす
+function ripple(ctx, src, t, { k, oy }) {
+  const W = S.size, cw = src.width, ch = src.height;
+  const step = Math.max(1, Math.round(k));
+  const amp = W * 0.028 * k;
+  for (let y = 0; y < ch; y += step) {
+    const ph = ((y / k + oy) / W) * TAU * 4;
+    const dx = Math.sin(ph - TAU * t) * amp + Math.sin(ph * 2.3 + TAU * 2 * t) * amp * 0.35;
+    const sy = Math.min(ch - step, Math.max(0, y + Math.sin(ph * 0.7 - TAU * t) * W * 0.012 * k));
+    ctx.drawImage(src, 0, sy, cw, step, dx, y, cw, step);
+  }
+}
+
+// 溶けて流れ落ちる：列ごとに下へ引き伸ばす（列ごとに垂れ方を変える）
+function melt(ctx, src, t, { k, ox, oy }) {
+  const W = S.size, cw = src.width, b = layout.bounds;
+  const p = t < 0.7 ? (t / 0.7) ** 1.6 : t < 0.85 ? 1 : 1 - (t - 0.85) / 0.15;
+  const hB = b.y1 - b.y0;
+  const A = b.y0 + hB * 0.15, B = b.y1 + W * 0.08; // この範囲を引き伸ばす（基準座標）
+  const sy = (A - oy) * k, sh = (B - A) * k;
+  if (sy > 0) ctx.drawImage(src, 0, 0, cw, sy, 0, 0, cw, sy);
+  const step = Math.max(1, Math.round(k * 2));
+  for (let x = 0; x < cw; x += step) {
+    const u = (x / k + ox) / W;
+    // 全体が少したれる + ところどころ細く長く垂れる
+    const peak = Math.max(0, 0.6 * Math.sin(u * 31 + 0.3) + 0.4 * Math.sin(u * 71 + 2.1)) ** 3;
+    const drip = hB * p * (0.1 + 0.05 * Math.sin(u * 13) + 1.4 * peak) * k;
+    ctx.drawImage(src, x, sy, step, sh, x, sy, step, sh + drip);
+  }
+}
+
+// 'transparent' の色は「くり抜き」として描く
+function paint(ctx, color, prop) {
+  if (color === 'transparent') {
+    ctx.globalCompositeOperation = 'destination-out';
+    ctx[prop] = '#000';
+  } else {
+    ctx.globalCompositeOperation = 'source-over';
+    ctx[prop] = color;
+  }
+}
+const stopColor = (c) => c === 'transparent' ? 'rgba(0,0,0,0)' : c;
 
 function drawText(ctx, t, L) {
   const fs = L.fs, n = L.count;
@@ -221,9 +286,12 @@ function drawText(ctx, t, L) {
   if (S.colorFx === 'blink' && Math.floor(t * 4) % 2) [fill, stroke] = [S.stroke, S.fill];
   let grad = null;
   if (S.colorFx === 'gradient') {
-    const r = L.textRect;
-    grad = ctx.createLinearGradient(0, r.y + r.h * 0.2, 0, r.y + r.h * 0.8);
-    grad.addColorStop(0, S.fill); grad.addColorStop(1, S.fill2);
+    if (S.fill === 'transparent' && S.fill2 === 'transparent') fill = 'transparent';
+    else {
+      const r = L.textRect;
+      grad = ctx.createLinearGradient(0, r.y + r.h * 0.2, 0, r.y + r.h * 0.8);
+      grad.addColorStop(0, stopColor(S.fill)); grad.addColorStop(1, stopColor(S.fill2));
+    }
   }
   const chars = L.lines.flat().map((c) => ({ ...c, ...charMotion(t, c.i, n) })).filter((c) => c.vis);
   const each = (fn) => chars.forEach((c) => fn(c.g, c.x, c.y + c.dy * fs, c.i));
@@ -231,25 +299,44 @@ function drawText(ctx, t, L) {
   const sw = S.strokeW * fs * 2;
   const ow = sw + 0.16 * fs;
   if (S.shadow) {
+    ctx.globalCompositeOperation = 'source-over';
     ctx.fillStyle = ctx.strokeStyle = 'rgba(40,20,40,0.75)';
     ctx.lineWidth = S.outer2 ? ow : sw;
     const d = fs * 0.06;
     each((g, x, y) => { if (ctx.lineWidth > 0) ctx.strokeText(g, x + d, y + d); ctx.fillText(g, x + d, y + d); });
   }
   if (S.outer2) {
-    ctx.strokeStyle = S.outer; ctx.lineWidth = ow;
+    paint(ctx, S.outer, 'strokeStyle'); ctx.lineWidth = ow;
     each((g, x, y) => ctx.strokeText(g, x, y));
   }
   if (sw > 0) {
-    ctx.strokeStyle = stroke; ctx.lineWidth = sw;
+    paint(ctx, stroke, 'strokeStyle'); ctx.lineWidth = sw;
     each((g, x, y) => ctx.strokeText(g, x, y));
   }
-  each((g, x, y, i) => {
-    ctx.fillStyle = S.colorFx === 'rainbow'
-      ? `hsl(${(((i * 40 - t * 360) % 360) + 360) % 360}, 95%, 60%)`
-      : grad || fill;
-    ctx.fillText(g, x, y);
-  });
+  if (S.colorFx === 'rainbow') {
+    ctx.globalCompositeOperation = 'source-over';
+    each((g, x, y, i) => {
+      ctx.fillStyle = `hsl(${(((i * 40 - t * 360) % 360) + 360) % 360}, 95%, 60%)`;
+      ctx.fillText(g, x, y);
+    });
+  } else if (grad) {
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.fillStyle = grad;
+    each((g, x, y) => ctx.fillText(g, x, y));
+  } else {
+    paint(ctx, fill, 'fillStyle');
+    each((g, x, y) => ctx.fillText(g, x, y));
+  }
+  ctx.globalCompositeOperation = 'source-over';
+}
+
+function fillBg(ctx) {
+  if (S.bgColor === 'transparent') return;
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.globalCompositeOperation = 'destination-over';
+  ctx.fillStyle = S.bgColor;
+  ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+  ctx.globalCompositeOperation = 'source-over';
 }
 
 // ---------- プレビュー ----------
@@ -260,6 +347,7 @@ function tick(now) {
   if (pv.width !== S.size) { pv.width = pv.height = S.size; layout = null; }
   const t = (((now - startTime) / 1000) / S.dur) % 1;
   render(pctx, t);
+  fillBg(pctx);
   requestAnimationFrame(tick);
 }
 
@@ -269,8 +357,9 @@ async function ensureFont() {
 }
 
 // ---------- GIF 作成 ----------
-const isAnimated = () => S.motion !== 'none' || S.colorFx === 'rainbow' || S.colorFx === 'blink';
+const isAnimated = () => S.motion !== 'none' || S.effect !== 'none' || S.colorFx === 'rainbow' || S.colorFx === 'blink';
 let resultUrl = null, resultBlob = null;
+const pause = () => new Promise((r) => setTimeout(r, 0));
 
 async function makeGif() {
   const btn = $('makeBtn'), bar = $('progress');
@@ -281,25 +370,57 @@ async function makeGif() {
   try {
     await ensureFont();
     const W = S.size;
-    const c = document.createElement('canvas');
-    c.width = c.height = W;
-    const ctx = c.getContext('2d', { willReadFrequently: true });
     const n = isAnimated() ? Math.min(60, Math.max(2, Math.round(S.dur * S.fps))) : 1;
     layout = null;
+
+    // 1周目：全コマを描いて、動く範囲も含めた「実際に絵がある範囲」を求める
+    const c1 = document.createElement('canvas');
+    c1.width = c1.height = W;
+    const x1c = c1.getContext('2d', { willReadFrequently: true });
+    let bx0 = W, by0 = W, bx1 = -1, by1 = -1;
+    for (let i = 0; i < n; i++) {
+      render(x1c, i / n);
+      const d = x1c.getImageData(0, 0, W, W).data;
+      for (let y = 0; y < W; y++) {
+        const row = y * W * 4;
+        for (let x = 0; x < W; x++) {
+          if (d[row + x * 4 + 3] > 8) {
+            if (x < bx0) bx0 = x; if (x > bx1) bx1 = x;
+            if (y < by0) by0 = y; if (y > by1) by1 = y;
+          }
+        }
+      }
+      setP((i + 1) / n * 0.15);
+      if (i % 4 === 3) await pause();
+    }
+    if (bx1 < 0) throw new Error('何も描かれていません');
+    bx0 = Math.max(0, bx0 - 1); by0 = Math.max(0, by0 - 1);
+    bx1 = Math.min(W - 1, bx1 + 1); by1 = Math.min(W - 1, by1 + 1);
+    const bw = bx1 - bx0 + 1, bh = by1 - by0 + 1;
+
+    // 2周目：その範囲だけを、長い辺が指定サイズになるよう描き直す
+    const k = W / Math.max(bw, bh);
+    const ow = Math.max(1, Math.round(bw * k)), oh = Math.max(1, Math.round(bh * k));
+    const c2 = document.createElement('canvas');
+    c2.width = ow; c2.height = oh;
+    const x2c = c2.getContext('2d', { willReadFrequently: true });
+    const bg = S.bgColor === 'transparent' ? null : hexRgb(S.bgColor);
     const frames = [];
     for (let i = 0; i < n; i++) {
-      render(ctx, i / n);
-      frames.push(ctx.getImageData(0, 0, W, W));
-      setP((i + 1) / n * 0.25);
-      if (i % 4 === 3) await new Promise((r) => setTimeout(r, 0));
+      render(x2c, i / n, { k, ox: bx0, oy: by0 });
+      const img = x2c.getImageData(0, 0, ow, oh);
+      if (bg) flatten(img, bg);
+      frames.push(img);
+      setP(0.15 + (i + 1) / n * 0.15);
+      if (i % 4 === 3) await pause();
     }
     layout = null;
     const total = S.dur * 100;
     const delays = frames.map((_, i) => Math.max(2, Math.round((i + 1) * total / n) - Math.round(i * total / n)));
     const blob = await encodeGIF(frames, {
-      delays, transparent: S.bg === 'transparent', onProgress: (p) => setP(0.25 + p * 0.75),
+      delays, transparent: !bg, onProgress: (p) => setP(0.3 + p * 0.7),
     });
-    showResult(blob, n);
+    showResult(blob, n, ow, oh);
   } catch (e) {
     console.error(e);
     toast('作成に失敗しました: ' + e.message);
@@ -309,7 +430,23 @@ async function makeGif() {
   }
 }
 
-function showResult(blob, n) {
+function hexRgb(h) {
+  const v = parseInt(h.slice(1), 16);
+  return [(v >> 16) & 255, (v >> 8) & 255, v & 255];
+}
+// 背景色の上に合成して不透明にする
+function flatten(img, [br, bgc, bb]) {
+  const d = img.data;
+  for (let i = 0; i < d.length; i += 4) {
+    const a = d[i + 3] / 255;
+    d[i] = d[i] * a + br * (1 - a);
+    d[i + 1] = d[i + 1] * a + bgc * (1 - a);
+    d[i + 2] = d[i + 2] * a + bb * (1 - a);
+    d[i + 3] = 255;
+  }
+}
+
+function showResult(blob, n, w, h) {
   if (resultUrl) URL.revokeObjectURL(resultUrl);
   resultBlob = blob;
   resultUrl = URL.createObjectURL(blob);
@@ -317,7 +454,7 @@ function showResult(blob, n) {
   $('dlBtn').href = resultUrl;
   $('dlBtn').download = fileName();
   const kb = blob.size / 1024;
-  $('resultInfo').textContent = `${S.size}×${S.size}px · ${n}コマ · ${kb < 1000 ? kb.toFixed(0) + 'KB' : (kb / 1024).toFixed(1) + 'MB'}`
+  $('resultInfo').textContent = `${w}×${h}px · ${n}コマ · ${kb < 1000 ? kb.toFixed(0) + 'KB' : (kb / 1024).toFixed(1) + 'MB'}`
     + (kb > 256 ? '（Discordの絵文字は256KBまで。小さいサイズを選ぶと軽くなります）' : '');
   const panel = $('resultPanel');
   panel.hidden = false;
@@ -408,6 +545,7 @@ redraws.push(chips('fontChips', FONTS.map(([f, w, name]) => [f, name, w]), 'font
   label: (b, v, text, w) => { b.textContent = text; b.style.fontFamily = `"${v}"`; b.style.fontWeight = w; },
 }));
 redraws.push(chips('motionChips', MOTIONS, 'motion'));
+redraws.push(chips('effectChips', EFFECTS, 'effect'));
 const durLabel = () => { $('durLabel').textContent = `${S.dur.toFixed(1)}秒で1周`; };
 redraws.push(bindInput('dur', 'dur', { num: true, onInput: durLabel }), durLabel);
 
@@ -421,14 +559,42 @@ redraws.push(chips('styleChips', STYLES.map(([name, st]) => [name, name, st]), n
   onPick: (v, st) => { Object.assign(S, st); refreshAll(); changed('style'); },
 }));
 redraws.push(chips('colorFxChips', COLOR_FX, 'colorFx'));
-for (const k of ['fill', 'fill2', 'stroke', 'outer', 'bgColor']) redraws.push(bindInput(k, k));
+// 色選び（「透明」も選べる）
+function colorPicker(el, onChange) {
+  const key = el.dataset.key;
+  const sw = document.createElement('span');
+  sw.className = 'sw';
+  const input = document.createElement('input');
+  input.type = 'color';
+  input.setAttribute('aria-label', el.dataset.label);
+  sw.append(input);
+  const tb = document.createElement('button');
+  tb.type = 'button';
+  tb.className = 'tbtn';
+  tb.textContent = '透明';
+  el.replaceChildren(document.createTextNode(el.dataset.label), sw, tb);
+  const last = S[key] !== 'transparent' ? S[key] : (DEFAULTS[key] !== 'transparent' ? DEFAULTS[key] : '#ffffff');
+  input.value = last;
+  const draw = () => {
+    const t = S[key] === 'transparent';
+    if (!t) input.value = S[key];
+    el.classList.toggle('is-t', t);
+    tb.setAttribute('aria-pressed', String(t));
+  };
+  input.addEventListener('input', () => { S[key] = input.value; draw(); changed(key); onChange?.(); });
+  tb.addEventListener('click', () => {
+    S[key] = S[key] === 'transparent' ? input.value : 'transparent';
+    draw(); changed(key); onChange?.();
+  });
+  draw();
+  return draw;
+}
 redraws.push(bindInput('strokeW', 'strokeW', { num: true }));
 redraws.push(bindInput('outer2', 'outer2'));
 redraws.push(bindInput('shadow', 'shadow'));
 
 redraws.push(chips('sizeChips', SIZES, 'size'));
 redraws.push(chips('fpsChips', FPS, 'fps'));
-redraws.push(chips('bgChips', BGS, 'bg'));
 redraws.push(chips('textPosChips', TEXT_POS, 'textPos'));
 
 // 写真
@@ -438,7 +604,9 @@ const syncPhotoFx = () => {
 };
 redraws.push(chips('filterChips', FILTERS, 'filter', { onPick: syncPhotoFx }));
 redraws.push(bindInput('border', 'border', { num: true, onInput: syncPhotoFx }));
-redraws.push(bindInput('borderColor', 'borderColor', { onInput: syncPhotoFx }));
+for (const el of document.querySelectorAll('.cpick')) {
+  redraws.push(colorPicker(el, el.dataset.key === 'borderColor' ? syncPhotoFx : null));
+}
 redraws.push(bindInput('photoScale', 'photoScale', { num: true }));
 
 const drawTools = chips('toolChips', TOOLS, null, {
@@ -490,7 +658,6 @@ function syncVisibility() {
   $('tolWrap').hidden = photo.tool !== 'wand';
   $('brushWrap').hidden = photo.tool === 'wand';
   $('fill2Wrap').hidden = S.colorFx !== 'gradient';
-  $('bgColor').hidden = S.bg !== 'color';
   $('textPosChips').parentElement && ($('textPosChips').hidden = !S.text.trim());
 }
 

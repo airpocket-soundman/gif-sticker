@@ -59,6 +59,8 @@
       <section class="panel">
         <h2>動き</h2>
         <div class="chips motion-chips" id="motionChips"></div>
+        <label class="field-label">エフェクト（動きと組み合わせOK）</label>
+        <div class="chips" id="effectChips"></div>
         <div class="row">
           <label class="slider">速さ <span id="durLabel"></span>
             <input id="dur" type="range" min="0.4" max="3" step="0.1">
@@ -72,10 +74,10 @@
         <div class="chips" id="styleChips"></div>
         <div class="chips" id="colorFxChips"></div>
         <div class="colors">
-          <label>文字<input id="fill" type="color"></label>
-          <label id="fill2Wrap">文字2<input id="fill2" type="color"></label>
-          <label>ふち<input id="stroke" type="color"></label>
-          <label>外ふち<input id="outer" type="color"></label>
+          <div class="cpick" data-key="fill" data-label="文字"></div>
+          <div class="cpick" data-key="fill2" data-label="文字2" id="fill2Wrap"></div>
+          <div class="cpick" data-key="stroke" data-label="ふち"></div>
+          <div class="cpick" data-key="outer" data-label="外ふち"></div>
         </div>
         <label class="slider">ふちの太さ
           <input id="strokeW" type="range" min="0" max="0.3" step="0.01">
@@ -117,7 +119,7 @@
           <label class="field-label">加工</label>
           <div class="chips" id="filterChips"></div>
           <div class="colors">
-            <label>シールふち<input id="borderColor" type="color"></label>
+            <div class="cpick" data-key="borderColor" data-label="シールふち"></div>
           </div>
           <label class="slider">シールふちの太さ
             <input id="border" type="range" min="0" max="24" step="1">
@@ -133,14 +135,13 @@
       <!-- 出力 -->
       <section class="panel">
         <h2>出力設定</h2>
-        <label class="field-label">サイズ</label>
+        <label class="field-label">サイズ（長い辺・余白は自動でカット）</label>
         <div class="chips seg" id="sizeChips"></div>
         <label class="field-label">なめらかさ</label>
         <div class="chips seg" id="fpsChips"></div>
         <label class="field-label">背景</label>
-        <div class="row">
-          <div class="chips seg" id="bgChips"></div>
-          <input id="bgColor" type="color" aria-label="背景色">
+        <div class="colors">
+          <div class="cpick" data-key="bgColor" data-label="背景色"></div>
         </div>
       </section>
 

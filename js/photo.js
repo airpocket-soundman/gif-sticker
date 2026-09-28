@@ -193,7 +193,7 @@ export class PhotoEditor {
     if (this.fx.filter === 'pixel') cut = pixelate(cut, 10);
     const box = alphaBounds(cut);
     if (!box) { this.art = null; this.onChange(); return; }
-    const r = this.fx.border;
+    const r = this.fx.borderColor === 'transparent' ? 0 : this.fx.border;
     const out = makeCanvas(box.w + r * 2 + 2, box.h + r * 2 + 2);
     const o = out.getContext('2d');
     if (r > 0) {

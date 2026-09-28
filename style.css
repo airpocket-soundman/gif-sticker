@@ -86,6 +86,17 @@ textarea {
 .slider input { width: 100%; accent-color: var(--accent); }
 .colors { display: flex; flex-wrap: wrap; gap: 12px; }
 .colors label { display: flex; flex-direction: column; align-items: center; font-size: .75rem; color: var(--muted); gap: 2px; }
+.cpick { display: flex; flex-direction: column; align-items: center; gap: 3px; font-size: .75rem; color: var(--muted); }
+.cpick .sw { position: relative; width: 44px; height: 36px; }
+.cpick .sw input { position: absolute; inset: 0; }
+.cpick.is-t .sw input { opacity: 0; }
+.cpick .sw::before {
+  content: ""; position: absolute; inset: 0; border-radius: 10px; border: 1px solid var(--line);
+  background: repeating-conic-gradient(#ccc 0 25%, #fff 0 50%) 0 0 / 10px 10px; display: none; pointer-events: none;
+}
+.cpick.is-t .sw::before { display: block; }
+.cpick .tbtn { padding: 2px 8px; font-size: .72rem; border-radius: 999px; }
+.cpick .tbtn[aria-pressed="true"] { background: var(--chip-on); border-color: var(--chip-on); color: var(--accent-ink); }
 input[type="color"] {
   width: 44px; height: 36px; padding: 0; border: 1px solid var(--line); border-radius: 10px; background: none; cursor: pointer;
 }

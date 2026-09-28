@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>GIFスタンプメーカー</title>
+  <meta name="description" content="文字や写真から、SNSで使える動くGIFスタンプをブラウザだけで作れるエディター">
+  <meta name="theme-color" content="#ff4f8b">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>✨</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&family=Hachi+Maru+Pop&family=Kaisei+Decol:wght@700&family=M+PLUS+Rounded+1c:wght@800&family=Mochiy+Pop+One&family=Rampart+One&family=Reggae+One&family=RocknRoll+One&family=Yusei+Magic&family=DotGothic16&display=swap">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="top">
+    <h1>✨ GIFスタンプメーカー</h1>
+    <p>文字や写真から動くスタンプを作って、そのままSNSに貼れます。画像はすべて端末内で処理されます。</p>
+  </header>
+
+  <main class="layout">
+    <!-- プレビュー（スマホでは上部に固定） -->
+    <section class="stage" aria-label="プレビュー">
+      <div class="preview-wrap" id="previewWrap">
+        <canvas id="preview" width="320" height="320"></canvas>
+      </div>
+      <button id="makeBtn" class="primary big">GIFを作る</button>
+      <div id="progress" class="progress" hidden><div></div></div>
+    </section>
+
+    <div class="panels">
+      <!-- 結果 -->
+      <section id="resultPanel" class="panel result" hidden>
+        <h2>できあがり</h2>
+        <div class="result-body">
+          <img id="resultImg" alt="作成したGIFスタンプ">
+          <div class="result-side">
+            <p class="hint">画像を<b>長押し</b>（PCは右クリック）で「コピー」「保存」もできます。</p>
+            <p id="resultInfo" class="meta"></p>
+            <div class="btns">
+              <button id="shareBtn" class="primary">📤 共有</button>
+              <button id="copyBtn">📋 コピー</button>
+              <a id="dlBtn" class="btn" download="sticker.gif">💾 保存</a>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 文字 -->
+      <section class="panel">
+        <h2>文字</h2>
+        <textarea id="text" rows="2" placeholder="スタンプの文字（改行OK・絵文字OK）"></textarea>
+        <div class="chips" id="phraseChips"></div>
+        <label class="field-label">フォント</label>
+        <div class="chips font-chips" id="fontChips"></div>
+      </section>
+
+      <!-- 動き -->
+      <section class="panel">
+        <h2>動き</h2>
+        <div class="chips motion-chips" id="motionChips"></div>
+        <div class="row">
+          <label class="slider">速さ <span id="durLabel"></span>
+            <input id="dur" type="range" min="0.4" max="3" step="0.1">
+          </label>
+        </div>
+      </section>
+
+      <!-- 色 -->
+      <section class="panel">
+        <h2>色</h2>
+        <div class="chips" id="styleChips"></div>
+        <div class="chips" id="colorFxChips"></div>
+        <div class="colors">
+          <label>文字<input id="fill" type="color"></label>
+          <label id="fill2Wrap">文字2<input id="fill2" type="color"></label>
+          <label>ふち<input id="stroke" type="color"></label>
+          <label>外ふち<input id="outer" type="color"></label>
+        </div>
+        <label class="slider">ふちの太さ
+          <input id="strokeW" type="range" min="0" max="0.3" step="0.01">
+        </label>
+        <div class="row checks">
+          <label><input id="outer2" type="checkbox"> 外ふち（二重）</label>
+          <label><input id="shadow" type="checkbox"> 影</label>
+        </div>
+      </section>
+
+      <!-- 写真 -->
+      <section class="panel">
+        <h2>写真素材 <small>（任意）</small></h2>
+        <p class="hint">自分の写真を読み込んで、写っているものを切り抜いてスタンプにできます。</p>
+        <label class="btn primary file-btn">📷 写真を選ぶ<input id="photoFile" type="file" accept="image/*" hidden></label>
+
+        <div id="photoTools" hidden>
+          <div class="edit-wrap"><canvas id="photoEdit"></canvas></div>
+          <p class="hint" id="toolHint"></p>
+          <div class="btns">
+            <button id="aiBtn" class="primary">✨ AIで自動切り抜き</button>
+            <button id="cornerBtn">🧹 背景をまとめて消す</button>
+          </div>
+          <p id="aiStatus" class="meta"></p>
+          <div class="chips seg" id="toolChips"></div>
+          <label class="slider" id="tolWrap">似た色の範囲
+            <input id="tolerance" type="range" min="5" max="120" step="1">
+          </label>
+          <label class="slider" id="brushWrap" hidden>ブラシの大きさ
+            <input id="brush" type="range" min="4" max="80" step="1">
+          </label>
+          <div class="btns small">
+            <button id="undoBtn">↩ 戻す</button>
+            <button id="invertBtn">🔁 反転</button>
+            <button id="resetMaskBtn">🔄 切り抜きリセット</button>
+            <button id="removePhotoBtn">🗑 写真を外す</button>
+          </div>
+
+          <label class="field-label">加工</label>
+          <div class="chips" id="filterChips"></div>
+          <div class="colors">
+            <label>シールふち<input id="borderColor" type="color"></label>
+          </div>
+          <label class="slider">シールふちの太さ
+            <input id="border" type="range" min="0" max="24" step="1">
+          </label>
+          <label class="slider">写真の大きさ
+            <input id="photoScale" type="range" min="0.4" max="1.3" step="0.05">
+          </label>
+          <label class="field-label">文字の位置</label>
+          <div class="chips seg" id="textPosChips"></div>
+        </div>
+      </section>
+
+      <!-- 出力 -->
+      <section class="panel">
+        <h2>出力設定</h2>
+        <label class="field-label">サイズ</label>
+        <div class="chips seg" id="sizeChips"></div>
+        <label class="field-label">なめらかさ</label>
+        <div class="chips seg" id="fpsChips"></div>
+        <label class="field-label">背景</label>
+        <div class="row">
+          <div class="chips seg" id="bgChips"></div>
+          <input id="bgColor" type="color" aria-label="背景色">
+        </div>
+      </section>
+
+      <footer class="foot">
+        <a href="https://github.com/airpocket-soundman/gif-sticker" target="_blank" rel="noopener">GitHub</a>
+        · <button id="resetAll" class="link">設定を初期化</button>
+      </footer>
+    </div>
+  </main>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
